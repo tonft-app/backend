@@ -308,7 +308,7 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
       const result = await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
 
       if (result.error == null) {
-        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress);
+        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress, hash = hash);
       }
     }
 

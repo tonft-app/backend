@@ -366,7 +366,6 @@ export const setProcessedToTrueByIds = async (ids: number[]) => {
     await client.end();
 }
 
-// delete order by hash 
 export const deleteOrderByHash = async (hash: string) => {
     const client = new Client(DATABASE_CONFIG);
 
@@ -381,13 +380,4 @@ export const deleteOrderByHash = async (hash: string) => {
     );
 
     await client.end();
-
 }
-
-
-
-(async () => {
-
-
-    await deleteOrderByHash("88DE790078826542");
-})();
