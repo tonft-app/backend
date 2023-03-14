@@ -127,13 +127,13 @@ export const setStatusByHashes = async (hashes: string[], status: string) => {
     await client.connect();
     const { rows } = await client.query(
         `UPDATE orders 
-        SET status = '${status}' 
-        WHERE hash IN (${hashes.map(hash => `'${hash}'`)})`
+        SET status = $1 
+        WHERE hash IN (${hashes.map((_, i) => `$${i + 2}`).join(',')})`,
+        [status, ...hashes]
     );
     await client.end();
 
     return rows;
-
 }
 
 export const getOrderByHash = async (hash: string) => {
@@ -142,7 +142,8 @@ export const getOrderByHash = async (hash: string) => {
     await client.connect();
     const { rows } = await client.query(
         `SELECT * FROM orders 
-        WHERE hash = '${hash}'`
+        WHERE hash = $1`,
+        [hash]
     );
     await client.end();
 
@@ -153,6 +154,7 @@ export const getOrderByHash = async (hash: string) => {
     return rows[0];
 }
 
+
 export const getOrders = async (nftItemAddress: string, ownerAddress: string, contractAddress: string) => {
     const client = new Client(DATABASE_CONFIG);
 
@@ -160,15 +162,16 @@ export const getOrders = async (nftItemAddress: string, ownerAddress: string, co
     const { rows } = await client.query(
         `SELECT * 
         FROM orders
-        WHERE nft_item_address = '${nftItemAddress}' 
-            AND owner_address = '${ownerAddress}' 
-            AND contract_address='${contractAddress}'`
+        WHERE nft_item_address = $1 
+            AND owner_address = $2 
+            AND contract_address=$3`,
+        [nftItemAddress, ownerAddress, contractAddress]
     );
     await client.end();
 
     return rows;
-
 }
+
 
 
 export const insertIntoOrders = async (contractAddress: string, nftItemAddress: string, ownerAddress: string, price: string, status: string, royaltyPercent: string, royaltyAddress: string, refPercent: string, boughtBy: string, hash: string) => {
@@ -178,10 +181,11 @@ export const insertIntoOrders = async (contractAddress: string, nftItemAddress: 
     const { rows } = await client.query(
         `SELECT * 
         FROM orders
-        WHERE hash = '${hash}'`
+        WHERE hash = $1`,
+        [hash]
     );
     if (rows.length > 0) {
-        return hash;
+        return { hash, error: 'hash already exists' };
     }
 
     await client.query(
@@ -197,23 +201,25 @@ export const insertIntoOrders = async (contractAddress: string, nftItemAddress: 
             hash
             )
         VALUES (
-            '${contractAddress}', 
-            '${nftItemAddress}', 
-            '${ownerAddress}', 
-            '${price}', 
-            '${status}', 
-            '${royaltyPercent}', 
-            '${royaltyAddress}', 
-            '${refPercent}', 
-            '${boughtBy}', 
-            '${hash}'
-            )`
+            $1, 
+            $2, 
+            $3, 
+            $4, 
+            $5, 
+            $6, 
+            $7, 
+            $8, 
+            $9, 
+            $10
+            )`,
+        [contractAddress, nftItemAddress, ownerAddress, price, status, royaltyPercent, royaltyAddress, refPercent, boughtBy, hash]
     );
     await client.end();
 
-    return hash;
+    return { hash, error: null };
 
 }
+
 
 
 export const changeStatusOfOrder = async (nftItemAddress: string, status: string) => {
@@ -222,8 +228,9 @@ export const changeStatusOfOrder = async (nftItemAddress: string, status: string
     await client.connect();
     await client.query(
         `UPDATE orders 
-        SET status = '${status}' 
-        WHERE nft_item_address = '${nftItemAddress}'`
+        SET status = $1 
+        WHERE nft_item_address = $2`,
+        [status, nftItemAddress]
     );
 
     await client.end();
@@ -235,8 +242,9 @@ export const changeStatusOfOrderBySaleContractAddress = async (saleContractAddre
     await client.connect();
     await client.query(
         `UPDATE orders 
-        SET status = '${status}' 
-        WHERE contract_address = '${saleContractAddress}'`
+        SET status = $1 
+        WHERE contract_address = $2`,
+        [status, saleContractAddress]
     );
     await client.end();
 }
@@ -258,20 +266,12 @@ export const insertIntoOrdersTable = async (contractAddress: string, nftItemAddr
         bought_by,
         hash
         )
-        VALUES (
-            '${contractAddress}', 
-            '${nftItemAddress}', 
-            '${ownerAddress}', 
-            '${price}', 
-            '${status}', 
-            '${royaltyPercent}', 
-            '${royaltyAddress}', 
-            '${refPercent}', 
-            '${boughtBy}', 
-            '${hash}'
-        )`);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [contractAddress, nftItemAddress, ownerAddress, price, status, royaltyPercent, royaltyAddress, refPercent, boughtBy, hash]);
+
     await client.end();
 }
+
 
 export const deleteOrdersByIds = async (ids: number[]) => {
     const client = new Client(DATABASE_CONFIG);
@@ -291,17 +291,10 @@ export const insertIntoReferralBonusTable = async (wallet_address: string, amoun
     const client = new Client(DATABASE_CONFIG);
 
     await client.connect();
-    await client.query(`INSERT INTO referral_bonus (
-        user_wallet, 
-        amount,
-        contract_address, 
-        processed
-    ) VALUES (
-        '${wallet_address}', 
-        '${amount}', 
-        '${contract_address}', 
-        '${processed}'
-    )`);
+    await client.query(
+        `INSERT INTO referral_bonus (user_wallet, amount, contract_address, processed) VALUES ($1, $2, $3, $4)`,
+        [wallet_address, amount, contract_address, processed]
+    );
 
     await client.end();
 }
@@ -372,3 +365,29 @@ export const setProcessedToTrueByIds = async (ids: number[]) => {
     }
     await client.end();
 }
+
+// delete order by hash 
+export const deleteOrderByHash = async (hash: string) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+
+    await client.query(
+
+        `DELETE FROM orders
+
+        WHERE hash = '${hash}'`
+
+    );
+
+    await client.end();
+
+}
+
+
+
+(async () => {
+
+
+    await deleteOrderByHash("88DE790078826542");
+})();

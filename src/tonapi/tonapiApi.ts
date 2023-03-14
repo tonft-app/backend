@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+
 export const getNftsByUserAddress = async (address: string) => {
     const response = await axios.get('https://tonapi.io/v1/nft/searchItems', {
         params: {
@@ -9,7 +10,8 @@ export const getNftsByUserAddress = async (address: string) => {
             'offset': '0'
         },
         headers: {
-            'accept': 'application/json'
+            'accept': 'application/json',
+            'Authorization': 'Bearer ' + process.env.TONAPI_TOKEN,
         }
     });
 
@@ -27,7 +29,8 @@ export const getNftItems = async (addresses: string) => {
             'addresses': addresses
         },
         headers: {
-            'accept': 'application/json'
+            'accept': 'application/json',
+            'Authorization': 'Bearer ' + process.env.TONAPI_TOKEN,
         }
     });
 

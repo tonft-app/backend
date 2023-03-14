@@ -1,5 +1,5 @@
 import { createCancelLink, createTransferLink, createSaleLink, createBuyLink } from "../tonkeeper/tonkeeperLinks";
-import { isNftTransfered, userFriendlyAddress } from "../toncenter/toncenterApi";
+import { getContractState, isNftTransfered, userFriendlyAddress } from "../toncenter/toncenterApi";
 import { calculateStatistics, getContractAddress } from "../utils/utils";
 import { getNftItems, getNftsByUserAddress } from "../tonapi/tonapiApi";
 import { NextFunction, Request, Response } from "express";
@@ -305,8 +305,11 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
     const transfered = await isNftTransfered(contractAddress, nftItemAddress);
 
     if (transfered) {
-      await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
-      await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress);
+      const result = await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
+
+      if (result.error == null) {
+        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress);
+      }
     }
 
 
@@ -396,12 +399,34 @@ const getConfig = async (req: Request, res: Response, next: NextFunction) => {
 }
 
 
+const checkForInactiveState = async (saleContractAddress: string) => {
+  let i = 0;
+  while (true) {
+    console.log('checkForInactiveState', i)
+    if (i > 6) {
+      break;
+    }
+
+    const contractState = await getContractState(saleContractAddress);
+    if (contractState.state === 'not active') {
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
+
+    i++;
+  }
+
+  return false;
+}
+
 
 const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunction) => {
+  console.log(req.query);
+
   const saleContractAddress = req.query.saleContractAddress;
   const fullPrice = req.query.fullPrice;
   const referral = req.query.referral;
-
 
   if (!saleContractAddress) {
     return res.status(400).json({
@@ -416,41 +441,32 @@ const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunc
   }
 
   const saleContractAddressFormated = await userFriendlyAddress(saleContractAddress.toString());
+  const actualBuy: boolean = await checkForInactiveState(saleContractAddressFormated);
+
+  console.log('actualBuy', actualBuy)
+
+  if (!actualBuy) {
+    return res.status(500).json({
+      message: "fake buy",
+    });
+  }
 
   await changeStatusOfOrderBySaleContractAddress(saleContractAddressFormated, 'sold');
 
-
-  // id SERIAL PRIMARY KEY,
-  //   contract_address VARCHAR(100) NOT NULL,
-  //     nft_item_address VARCHAR(100) NOT NULL,
-  //       owner_address VARCHAR(100) NOT NULL,
-  //         price REAL NOT NULL,
-  //           status VARCHAR(100) NOT NULL,
-  //             royalty_percent REAL,
-  //               royalty_address VARCHAR(100),
-  //                 ref_percent REAL,
-  //                   bought_by VARCHAR(100),
-  //                     hash VARCHAR(100),
-  //                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   const order = await getOrderBySaleContractAddress(saleContractAddressFormated);
+  if (order) {
+    await sendMessageToChannel(
+      order.contract_address,
+      order.nft_item_address,
+      order.price.toString(),
+      order.owner_address,
+      'sold'
+    )
+  }
+
 
   if (referral) {
     await insertIntoReferralBonusTable(referral.toString(), fullPrice.toString(), saleContractAddress.toString(), false);
-  }
-
-  if (order) {
-    try {
-      await sendMessageToChannel(
-        order.contract_address,
-        order.nft_item_address,
-        order.price.toString(),
-        order.owner_address,
-        'sold'
-      )
-    }
-    catch (error) {
-      console.log('sending message error', error)
-    }
   }
 
   return res.status(200).json({
