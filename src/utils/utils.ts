@@ -1,6 +1,7 @@
 import { getRecentTransactions } from '../toncenter/toncenterApi';
 import { selectAllOrdersFromOrders } from '../db/db';
 import { randomBytes } from 'crypto';
+import TonWeb from 'tonweb';
 
 export const getContractAddress = async (ownerAddress: string, createdAt: string) => {
     const transactions = await getRecentTransactions(process.env.MARKETPLACE_ADDRESS!);
@@ -66,4 +67,8 @@ export function roundToPrecision(number: number, precision: number) {
     const factor = Math.pow(10, precision);
     return Math.round(number * factor) / factor;
 
+}
+
+export function toUserFriendlyAddress(address: string) {
+    return new TonWeb.utils.Address(address).toString(true, true, true);
 }

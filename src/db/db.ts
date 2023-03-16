@@ -425,7 +425,40 @@ export const setRoyaltyAndRefPercentByHash = async (hash: string, royaltyPercent
     await client.end();
 }
 
+// delete orders by nft address
+export const deleteOrderByNftAddress = async (nftAddress: string) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+
+    await client.query(
+        `DELETE FROM orders
+        WHERE nft_item_address = $1`,
+        [nftAddress]
+    );
+
+    await client.end();
+}
+
+// set ref for all orders
+export const setRefForAllOrders = async (ref: string) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+
+    await client.query(
+        `UPDATE orders
+        SET ref_percent = $1`,
+        [ref]
+    );
+
+    await client.end();
+}
+
+
+
 (async () => {
     // await deleteReferralBonusById(32);
-    await setRoyaltyAndRefPercentByHash("47F0B86478555157", '0', '2.5');
+    // await setRoyaltyAndRefPercentByHash("47F0B86478555157", '0', '2.5');
+    // await setRefForAllOrders("2.5");
 })();

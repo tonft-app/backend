@@ -1,6 +1,6 @@
 import { createCancelLink, createTransferLink, createSaleLink, createBuyLink } from "../tonkeeper/tonkeeperLinks";
 import { getContractState, isNftTransfered, userFriendlyAddress } from "../toncenter/toncenterApi";
-import { calculateStatistics, getContractAddress } from "../utils/utils";
+import { calculateStatistics, getContractAddress, toUserFriendlyAddress } from "../utils/utils";
 import { getNftItems, getNftsByUserAddress } from "../tonapi/tonapiApi";
 import { NextFunction, Request, Response } from "express";
 import { sendMessageToChannel } from "../telegram/bot";
@@ -15,6 +15,11 @@ import {
   getOrders,
   getOrderBySaleContractAddress,
 } from "../db/db";
+import { getFloorDataForCollections } from "../getgems/getgemsApi";
+
+import TonWeb from "tonweb";
+
+
 
 const getAllOffers = async (req: Request, res: Response, next: NextFunction) => {
   let activeAndSoldOffers = await getAllActiveAndSoldOffers();
@@ -26,15 +31,22 @@ const getAllOffers = async (req: Request, res: Response, next: NextFunction) => 
   }
   let itemsData = await getNftItems(activeAndSoldOffers.map((order) => order.nft_item_address).join(","));
 
+
+  const floorData = await getFloorDataForCollections();
+
   const unifiedData = activeAndSoldOffers.map((order, _) => {
     const item = itemsData.find((item: any) => {
       const address = Address.parseRaw(item.address).toFriendly();
       return address === order.nft_item_address
     }
     );
+
+    const floorPrice = floorData[toUserFriendlyAddress(item.collection_address)] === undefined ? 0 : floorData[toUserFriendlyAddress(item.collection_address)].floorPrice;
+
     return {
       ...order,
       ...item,
+      floor_price: floorPrice
     };
   });
 
