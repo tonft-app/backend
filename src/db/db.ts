@@ -46,8 +46,7 @@ export const getOrderBySaleContractAddress = async (saleContractAddress: string)
     await client.connect();
     const { rows } = await client.query(
         `SELECT * FROM orders
-        WHERE contract_address = $1
-        AND status = 'active'`,
+        WHERE contract_address = $1`,
         [saleContractAddress]
     );
     await client.end();
@@ -106,14 +105,13 @@ const createNewOrdersTable = async () => {
     await client.end();
 }
 
-export const getAllActiveOrders = async () => {
+export const getAllActiveAndSoldOffers = async () => {
     const client = new Client(DATABASE_CONFIG);
 
     await client.connect();
-    console.log('getAllActiveOrders');
     const { rows } = await client.query(
         `SELECT * FROM orders 
-        WHERE status = 'active'`
+        WHERE status = 'active' or status = 'sold'`
     );
     await client.end();
 
@@ -289,15 +287,18 @@ export const deleteOrdersByIds = async (ids: number[]) => {
 
 export const insertIntoReferralBonusTable = async (wallet_address: string, amount: string, contract_address: string, processed: boolean) => {
     const client = new Client(DATABASE_CONFIG);
-
+    console.log('insertIntoReferralBonusTable', wallet_address, amount, contract_address, processed);
     await client.connect();
-    await client.query(
+    const res = await client.query(
         `INSERT INTO referral_bonus (user_wallet, amount, contract_address, processed) VALUES ($1, $2, $3, $4)`,
         [wallet_address, amount, contract_address, processed]
     );
 
+    console.log(res);
+
     await client.end();
 }
+
 
 
 // select all solded orders and calculate different statistics for example: total solded amount, total items solded
@@ -366,6 +367,7 @@ export const setProcessedToTrueByIds = async (ids: number[]) => {
     await client.end();
 }
 
+
 export const deleteOrderByHash = async (hash: string) => {
     const client = new Client(DATABASE_CONFIG);
 
@@ -381,3 +383,49 @@ export const deleteOrderByHash = async (hash: string) => {
 
     await client.end();
 }
+
+export const changeReferralBonusProcessed = async (id: number, processed: boolean) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+    await client.query(
+        `UPDATE referral_bonus 
+        SET processed = $1 
+        WHERE id = $2`,
+        [processed, id]
+    );
+    await client.end();
+}
+
+export const deleteReferralBonusById = async (id: number) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+    await client.query(
+        `DELETE FROM referral_bonus
+        WHERE id = $1`,
+        [id]
+    );
+    await client.end();
+}
+
+//set royalty percent and ref percent by order hash
+export const setRoyaltyAndRefPercentByHash = async (hash: string, royaltyPercent: string, refPercent: string) => {
+    const client = new Client(DATABASE_CONFIG);
+
+    await client.connect();
+
+    await client.query(
+        `UPDATE orders
+        SET royalty_percent = $1, ref_percent = $2
+        WHERE hash = $3`,
+        [royaltyPercent, refPercent, hash]
+    );
+
+    await client.end();
+}
+
+(async () => {
+    // await deleteReferralBonusById(32);
+    await setRoyaltyAndRefPercentByHash("47F0B86478555157", '0', '2.5');
+})();

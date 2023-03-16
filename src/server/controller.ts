@@ -9,7 +9,7 @@ import { Address } from "ton";
 import {
   changeStatusOfOrderBySaleContractAddress,
   insertIntoReferralBonusTable,
-  getAllActiveOrders,
+  getAllActiveAndSoldOffers,
   insertIntoOrders,
   getOrderByHash,
   getOrders,
@@ -17,16 +17,16 @@ import {
 } from "../db/db";
 
 const getAllOffers = async (req: Request, res: Response, next: NextFunction) => {
-  let activeOrders = await getAllActiveOrders();
+  let activeAndSoldOffers = await getAllActiveAndSoldOffers();
 
-  if (activeOrders.length === 0) {
+  if (activeAndSoldOffers.length === 0) {
     return res.status(200).json({
       message: "No active orders",
     });
   }
-  let itemsData = await getNftItems(activeOrders.map((order) => order.nft_item_address).join(","));
+  let itemsData = await getNftItems(activeAndSoldOffers.map((order) => order.nft_item_address).join(","));
 
-  const unifiedData = activeOrders.map((order, _) => {
+  const unifiedData = activeAndSoldOffers.map((order, _) => {
     const item = itemsData.find((item: any) => {
       const address = Address.parseRaw(item.address).toFriendly();
       return address === order.nft_item_address
@@ -36,22 +36,25 @@ const getAllOffers = async (req: Request, res: Response, next: NextFunction) => 
       ...order,
       ...item,
     };
-
   });
 
-  const unifiedDataWIthoutNotActive = unifiedData.filter((order) => order.sale);
   const statistics = await calculateStatistics();
 
+  const soldOrders = unifiedData.filter((order) => order.status === "sold");
+  const activeOrders = unifiedData.filter((order) => order.status === "active");
+
+
   return res.status(200).json({
-    activeOrders: unifiedDataWIthoutNotActive,
+    activeOrders: activeOrders,
+    soldOrders: soldOrders,
     statistics
   });
 };
 
 const getOffer = async (req: Request, res: Response, next: NextFunction) => {
-  const nftItemAddress = req.query.nftItemAddress;
-  const ownerAddress = req.query.ownerAddress;
-  const saleContractAddress = req.query.saleContractAddress;
+  let nftItemAddress = req.query.nftItemAddress;
+  let ownerAddress = req.query.ownerAddress;
+  let saleContractAddress = req.query.saleContractAddress;
 
 
   if (!nftItemAddress) {
@@ -72,12 +75,11 @@ const getOffer = async (req: Request, res: Response, next: NextFunction) => {
     });
   }
 
+  saleContractAddress = saleContractAddress.toString();
+  nftItemAddress = nftItemAddress.toString();
+  ownerAddress = ownerAddress.toString();
 
-
-  const saleContractAddressFormated = saleContractAddress.toString();
-  const nftItemAddressFormated = nftItemAddress.toString();
-  const ownerAddressFormated = ownerAddress.toString();
-  const orders = await getOrders(nftItemAddressFormated, ownerAddressFormated, saleContractAddressFormated);
+  const orders = await getOrders(nftItemAddress, ownerAddress, saleContractAddress);
 
   if (orders.length === 0) {
     return res.status(404).json({
@@ -98,11 +100,11 @@ const getOffer = async (req: Request, res: Response, next: NextFunction) => {
 }
 
 const getInitLink = async (req: Request, res: Response, next: NextFunction) => {
-  const nftItemAddress = req.query.nftItemAddress;
-  const fullPrice = req.query.fullPrice;
-  const royaltyPercent = req.query.royaltyPercent;
-  const royaltyAddress = req.query.royaltyAddress;
-  const refPercent = req.query.refPercent;
+  let nftItemAddress = req.query.nftItemAddress;
+  let fullPrice = req.query.fullPrice;
+  let royaltyPercent = req.query.royaltyPercent;
+  let royaltyAddress = req.query.royaltyAddress;
+  let refPercent = req.query.refPercent;
 
   if (!nftItemAddress) {
     return res.status(400).json({
@@ -148,10 +150,25 @@ const getInitLink = async (req: Request, res: Response, next: NextFunction) => {
     });
   }
 
+  try {
+    if (Number.parseFloat(fullPrice.toString()) < 1) {
+      return res.status(400).json({
+        message: "fullPrice should be more than 1",
+      });
+    }
+  } catch (e) {
+    return res.status(400).json({
+      message: "fullPrice should be a number",
+    });
+  }
 
-  const nftItemAddessFormated = nftItemAddress.toString();
+  nftItemAddress = nftItemAddress.toString();
+  fullPrice = fullPrice.toString();
+  royaltyPercent = royaltyPercent.toString();
+  royaltyAddress = royaltyAddress.toString();
+  refPercent = refPercent.toString();
 
-  const link = createSaleLink(nftItemAddessFormated, fullPrice.toString(), royaltyPercent.toString(), royaltyAddress.toString(), refPercent.toString());
+  const link = createSaleLink(nftItemAddress, fullPrice, royaltyPercent, royaltyAddress, refPercent);
 
   return res.status(200).json({
     link,
@@ -206,8 +223,8 @@ const checkInit = async (req: Request, res: Response, next: NextFunction) => {
 
 const getTransferLink = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const contractAddress = req.query.contractAddress;
-    const nftItemAddress = req.query.nftItemAddress;
+    let contractAddress = req.query.contractAddress;
+    let nftItemAddress = req.query.nftItemAddress;
 
     if (!contractAddress) {
       return res.status(400).json({
@@ -221,7 +238,10 @@ const getTransferLink = async (req: Request, res: Response, next: NextFunction) 
       });
     }
 
-    const link = createTransferLink(contractAddress.toString(), nftItemAddress.toString());
+    contractAddress = contractAddress.toString();
+    nftItemAddress = nftItemAddress.toString();
+
+    const link = createTransferLink(contractAddress, nftItemAddress);
     return res.status(200).json({
       link,
     });
@@ -305,10 +325,14 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
     const transfered = await isNftTransfered(contractAddress, nftItemAddress);
 
     if (transfered) {
+      console.log("transfered")
       const result = await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
 
-      if (result.error == null) {
-        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress, hash = hash);
+
+      console.log("result", result)
+      if (result.error === null) {
+        console.log("send message")
+        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress, "new", hash);
       }
     }
 
@@ -464,7 +488,6 @@ const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunc
     )
   }
 
-
   if (referral) {
     await insertIntoReferralBonusTable(referral.toString(), fullPrice.toString(), saleContractAddress.toString(), false);
   }
@@ -475,7 +498,6 @@ const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunc
 }
 
 const nftCancelCallbackHandler = async (req: Request, res: Response, next: NextFunction) => {
-  console.log('nft-cancel-looooooooool')
   const saleContractAddress = req.query.saleContractAddress;
 
   if (!saleContractAddress) {
@@ -485,7 +507,6 @@ const nftCancelCallbackHandler = async (req: Request, res: Response, next: NextF
   }
 
   const saleContractAddressFormated = await userFriendlyAddress(saleContractAddress.toString());
-
   await changeStatusOfOrderBySaleContractAddress(saleContractAddressFormated, 'canceled');
 
   return res.status(200).json({
@@ -545,13 +566,19 @@ const getCollectionRoyalty = async (req: Request, res: Response, next: NextFunct
 export const getOfferById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     let orderHash = req.params.id;
-    const referral = req.params.referral;
+    let referral = req.params.referral;
 
     if (!orderHash) {
       return res.status(400).json({
         message: "id in link is required",
       });
     }
+
+    if (referral) {
+      referral = referral.toString().replace('+', '-').replace('/', '_').split("").reverse().join("");
+    }
+
+    console.log(referral, "referral")
 
     orderHash = orderHash.toString();
     const order = await getOrderByHash(orderHash);
@@ -562,6 +589,7 @@ export const getOfferById = async (req: Request, res: Response, next: NextFuncti
       });
     }
 
+    console.log('order', order)
     const cancelLink = createCancelLink(order.owner_address, order.contract_address);
     const buyLink = createBuyLink(order.contract_address, order.price, referral);
 

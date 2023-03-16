@@ -5,9 +5,18 @@ const MARKETPLACE_ADDRESS = process.env.MARKETPLACE_ADDRESS;
 const ROYALTY_ADDRESS = process.env.ROYALTY_ADDRESS;
 const TONKEEPER_TXREQUEST_URL = process.env.TONKEEPER_TXREQUEST_URL;
 
-export function createBuyLink(saleContractAddress: string, fullPrice: string, referral: string) {
-    const floatPrice = (parseFloat(fullPrice) + 1).toFixed(3);
 
+
+// function that rounds a number to a certain number of decimal places
+function roundToDecimalPlace(num: number, decimalPlaces: number) {
+    const factorOfTen = Math.pow(10, decimalPlaces);
+    return Math.round(num * factorOfTen) / factorOfTen;
+}
+
+export function createBuyLink(saleContractAddress: string, fullPrice: string, referral: string) {
+    const floatPrice = (roundToDecimalPlace(parseFloat(fullPrice), 2) + 1.01).toFixed(2);
+
+    console.log(`https://api.tonft.app/apiv1/callbackHandler?type=nft-buy&saleContractAddress=${saleContractAddress}&fullPrice=${fullPrice}&referral=${referral}`)
     const validTx = {
         version: "0",
         body: {
@@ -19,7 +28,7 @@ export function createBuyLink(saleContractAddress: string, fullPrice: string, re
                 messages: [
                     {
                         address: saleContractAddress,
-                        amount: toNano(floatPrice),
+                        amount: toNano(`${floatPrice}`),
                     }
                 ]
             },

@@ -60,3 +60,10 @@ export const calculateStatistics = async () => {
         uniqueWallets: uniqueWallets.length
     }
 }
+
+
+export function roundToPrecision(number: number, precision: number) {
+    const factor = Math.pow(10, precision);
+    return Math.round(number * factor) / factor;
+
+}

@@ -1,6 +1,8 @@
 import { Telegraf } from 'telegraf';
 import axios from 'axios';
 
+
+
 import fs from 'fs';
 import { pipeline } from "stream/promises";
 
@@ -10,9 +12,6 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 
 const bot = new Telegraf(BOT_TOKEN!);
 
-export const round = (value: number, precision: number): number => {
-  return Math.round(10 ** precision * value) / 10 ** precision;
-};
 
 async function getNftInfo(nftAddress: string) {
   const request = await axios.get(`https://tonapi.io/v1/nft/getItems?addresses=${nftAddress}`)
@@ -72,34 +71,34 @@ export function createMessageText(
   const link = 'https://tonft.app/offer/' + hash;
 
   if (type === "new") {
-    return `<b>🔖 <a href="${imageUrl}">New offer</a></b>
+    return `<b>🔖 <a href="${link}">New offer</a></b>
+
 <b>Item:</b> ${itemName}
 <b>Collection:</b> ${collectionName}
 
 <a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a> 
-<a href="${link}"><b>Buy now< for ${round(Number.parseFloat(salePrice), 2)} TON/b></a>`;
+
+<a href="${link}"><b>Buy now for ${Number.parseFloat(salePrice).toFixed(2)} TON</b></a>`;
   } else {
-    return `<b>🔖 <a href="${imageUrl}">New sale!</a></b>
+    return `<b>👑 <a href="${imageUrl}">ITEM SOLD</a></b>
+
 <b>Item:</b> ${itemName}
 
 <a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a> 
-Sale price: <a>${round(Number.parseFloat(salePrice), 2)}</a> 💎`;
+Sale price: <a>${Number.parseFloat(salePrice).toFixed(2)}</a> 💎`;
   }
 }
 
 export async function sendMessageToChannel(contractAddress: string, nftAddress: string, salePrice: string, ownerAddress: string, type = "new", hash = "") {
-  try {
-    const itemInfo = await getNftInfo(nftAddress);
-    const image = await getImage(itemInfo.imageUrl);
+  const itemInfo = await getNftInfo(nftAddress);
+  const image = await getImage(itemInfo.imageUrl);
 
-    if (!image || image.length === 0) {
-      await bot.telegram.sendMessage(CHANNEL_ID!, createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash), { parse_mode: 'HTML' });
-    } else {
-      const imageBinary = fs.readFileSync(IMAGE_PATH! + image);
-
-      await bot.telegram.sendPhoto(CHANNEL_ID!, { source: imageBinary }, { caption: createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash), parse_mode: 'HTML' });
-    }
-  } catch {
-    console.log("Error while sending message to channel", contractAddress, nftAddress, salePrice, ownerAddress);
+  if (!image) {
+    const text = createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash);
+    await bot.telegram.sendMessage(CHANNEL_ID!, text, { parse_mode: 'HTML' });
+  } else {
+    const imageBinary = fs.readFileSync(IMAGE_PATH! + image);
+    await bot.telegram.sendPhoto(CHANNEL_ID!, { source: imageBinary }, { caption: createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash), parse_mode: 'HTML' });
   }
 }
+

@@ -42,9 +42,6 @@ func sendTransactions(responseWriter http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// print
-	
-
 	commentText := req.URL.Query().Get("comment")
 
 	log.Println("comment:", commentText)

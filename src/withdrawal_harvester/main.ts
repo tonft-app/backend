@@ -4,22 +4,9 @@ import * as dotenv from 'dotenv'
 dotenv.config()
 
 import { selectNotProcessedReferralBonus, setProcessedToTrueByIds } from "../db/db";
+import { userFriendlyAddress } from "../toncenter/toncenterApi";
+import { roundToPrecision } from "../utils/utils";
 
-async function createUserFriendlyAddress(address: string) {
-    const response = await axios.get('https://toncenter.com/api/v2/packAddress', {
-        params: {
-            'address': address,
-            'api_key': "26a360b96446a5c9ff5a3dd16d4ae8731840d5efcb22c0a08e71be18c1662535"
-        },
-        headers: {
-            'accept': 'application/json'
-        }
-    });
-
-    console.log(response.data);
-
-    return response.data;
-}
 
 async function withdrawBonuses(txs: any, comment: string) {
     const params = {
@@ -40,12 +27,13 @@ async function withdrawBonuses(txs: any, comment: string) {
         // Handle error
         console.error(error);
     }
+
+    return false;
 }
 
 (async () => {
     console.log("start")
     while (true) {
-        console.log("selectNotProcessedReferralBonus")
         const notProcessedReferralBonuses = await selectNotProcessedReferralBonus();
 
         const transactions: any = {}
@@ -57,17 +45,17 @@ async function withdrawBonuses(txs: any, comment: string) {
                 continue;
             }
 
-            user_wallet = await createUserFriendlyAddress(user_wallet);
+            user_wallet = await userFriendlyAddress(user_wallet);
             // Слава Україні
             user_wallet = user_wallet.result.replace('+', '-').replace('/', '_');
 
-
-
             if (transactions[user_wallet]) {
-                transactions[user_wallet].amount = (transactions[user_wallet].amount + (amount * 0.025));
+                transactions[user_wallet] = roundToPrecision((transactions[user_wallet] + (amount * 0.025)), 3);
             } else {
-                transactions[user_wallet] = (amount * 0.025)
+                transactions[user_wallet] = roundToPrecision((amount * 0.024), 3);
             }
+
+            console.log(user_wallet, amount)
         }
 
         for (const key in transactions) {
@@ -77,14 +65,15 @@ async function withdrawBonuses(txs: any, comment: string) {
         console.log("withdrawBonuses")
 
         let result = false;
-        if (transactions.length > 0) {
+
+        if (Object.keys(transactions).length > 0) {
+            console.log(transactions)
             result = await withdrawBonuses(transactions, "Referral bonus from TONFT.app Bazaar ");
         }
 
-        await setProcessedToTrueByIds(notProcessedReferralBonuses.map((notProcessedReferralBonus) => notProcessedReferralBonus.id));
-
         if (result) {
             console.log("success");
+            await setProcessedToTrueByIds(notProcessedReferralBonuses.map((notProcessedReferralBonus) => notProcessedReferralBonus.id));
         }
 
 
@@ -93,3 +82,4 @@ async function withdrawBonuses(txs: any, comment: string) {
     }
 }
 )();
+
