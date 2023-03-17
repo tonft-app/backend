@@ -339,6 +339,23 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
 
     if (transfered) {
       console.log("transfered")
+
+
+      try {
+        const ref = parseFloat(refPercent);
+        const royalty = parseFloat(royaltyPercent);
+
+        if (ref + royalty > 100) {
+          return res.status(400).json({
+            message: "refPercent + royaltyPercent should be less than 100",
+          });
+        }
+      }
+      catch (e) {
+        console.log("error", e)
+      }
+
+
       const result = await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
 
 

@@ -34,51 +34,55 @@ async function withdrawBonuses(txs: any, comment: string) {
 (async () => {
     console.log("start")
     while (true) {
-        const notProcessedReferralBonuses = await selectNotProcessedReferralBonus();
+        try {
+            const notProcessedReferralBonuses = await selectNotProcessedReferralBonus();
 
-        const transactions: any = {}
+            const transactions: any = {}
 
-        for (const notProcessedReferralBonus of notProcessedReferralBonuses) {
-            let { id, user_wallet, amount, contract_address, processed, created_at } = notProcessedReferralBonus;
+            for (const notProcessedReferralBonus of notProcessedReferralBonuses) {
+                let { id, user_wallet, amount, contract_address, processed, created_at } = notProcessedReferralBonus;
 
-            if (user_wallet === 'undefined') {
-                continue;
+                if (user_wallet === 'undefined') {
+                    continue;
+                }
+
+                user_wallet = await userFriendlyAddress(user_wallet);
+                // Слава Україні
+                user_wallet = user_wallet.result.replace('+', '-').replace('/', '_');
+
+                if (transactions[user_wallet]) {
+                    transactions[user_wallet] = roundToPrecision((transactions[user_wallet] + (amount * 0.025)), 3);
+                } else {
+                    transactions[user_wallet] = roundToPrecision((amount * 0.024), 3);
+                }
+
+                console.log(user_wallet, amount)
             }
 
-            user_wallet = await userFriendlyAddress(user_wallet);
-            // Слава Україні
-            user_wallet = user_wallet.result.replace('+', '-').replace('/', '_');
-
-            if (transactions[user_wallet]) {
-                transactions[user_wallet] = roundToPrecision((transactions[user_wallet] + (amount * 0.025)), 3);
-            } else {
-                transactions[user_wallet] = roundToPrecision((amount * 0.024), 3);
+            for (const key in transactions) {
+                transactions[key] = transactions[key].toFixed(3);
             }
 
-            console.log(user_wallet, amount)
+            console.log("withdrawBonuses")
+
+            let result = false;
+
+            if (Object.keys(transactions).length > 0) {
+                console.log(transactions)
+                result = await withdrawBonuses(transactions, "Referral bonus from TONFT.app Bazaar ");
+            }
+
+            if (result) {
+                console.log("success");
+                await setProcessedToTrueByIds(notProcessedReferralBonuses.map((notProcessedReferralBonus) => notProcessedReferralBonus.id));
+            }
+
+            console.log("sleep 1 min")
+            await new Promise((resolve) => setTimeout(resolve, 1000 * 60));
+
+        } catch (error) {
+            console.log(error);
         }
-
-        for (const key in transactions) {
-            transactions[key] = transactions[key].toFixed(3);
-        }
-
-        console.log("withdrawBonuses")
-
-        let result = false;
-
-        if (Object.keys(transactions).length > 0) {
-            console.log(transactions)
-            result = await withdrawBonuses(transactions, "Referral bonus from TONFT.app Bazaar ");
-        }
-
-        if (result) {
-            console.log("success");
-            await setProcessedToTrueByIds(notProcessedReferralBonuses.map((notProcessedReferralBonus) => notProcessedReferralBonus.id));
-        }
-
-
-        console.log("sleep 1 min")
-        await new Promise((resolve) => setTimeout(resolve, 1000 * 60));
     }
 }
 )();
