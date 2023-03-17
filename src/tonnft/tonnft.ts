@@ -32,3 +32,11 @@ export const getRoyaltyParams = async (address: string) => {
 
     return response.data;
 }
+
+
+(async () => {
+    const res = await getRoyaltyParams("EQAl_hUCAeEv-fKtGxYtITAS6PPxuMRaQwHj0QAHeWe6ZSD0");
+    console.log(res);
+
+}
+)();

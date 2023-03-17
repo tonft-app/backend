@@ -18,6 +18,7 @@ import {
 import { getFloorDataForCollections } from "../getgems/getgemsApi";
 
 import TonWeb from "tonweb";
+import { getRoyaltyParamsFromTonscan } from "../tonscan/tonscanApi";
 
 
 
@@ -562,11 +563,11 @@ const getCollectionRoyalty = async (req: Request, res: Response, next: NextFunct
       });
     }
 
-    const collectionRoyalty = await getRoyaltyParams(collectionAddress.toString());
+    const { royalty, destination } = await getRoyaltyParamsFromTonscan(collectionAddress.toString());
 
     return res.status(200).json({
-      percent: collectionRoyalty.percent,
-      destination: collectionRoyalty.destination,
+      percent: royalty,
+      destination: destination,
     });
   } catch (error) {
     return res.status(500).json({

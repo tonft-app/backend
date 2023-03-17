@@ -1,5 +1,8 @@
 import axios from 'axios';
 
+import TonWeb from 'tonweb';
+import Cell from 'tonweb';
+
 export const getRecentTransactions = async (address: string) => {
 
     try {
@@ -22,6 +25,39 @@ export const getRecentTransactions = async (address: string) => {
 
     return [];
 }
+
+// export const getRoyaltyPercent = async (address_: string) => {
+//     try {
+//         const response = await axios.post(
+//             'https://toncenter.com/api/v2/runGetMethod',
+//             {
+//                 'address': address_,
+//                 'method': 'royalty_params',
+//                 'stack': []
+//             },
+//             {
+//                 headers: {
+//                     'accept': 'application/json',
+//                     'Content-Type': 'application/json'
+//                 }
+//             }
+//         );
+
+//         // from b64 to address
+//         const cell = new Cell.fromBoc(response.data.result.stack[0][2]);
+    
+//         return {
+//             royalty: parseInt(response.data.result.stack[0][1]),
+//             destination: response.data.result.stack[0][2]
+//         };
+//     }
+
+//     catch (error) {
+//         console.log(error)
+//     }
+
+//     return 0;
+// }
 
 
 export const userFriendlyAddress = async (address: string) => {
