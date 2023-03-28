@@ -63,12 +63,18 @@ export const calculateStatistics = async () => {
 }
 
 
-export function roundToPrecision(number: number, precision: number) {
+export const roundToPrecision = (number: number, precision: number) => {
     const factor = Math.pow(10, precision);
     return Math.round(number * factor) / factor;
 
 }
 
-export function toUserFriendlyAddress(address: string) {
+export const toUserFriendlyAddress = (address: string) => {
     return new TonWeb.utils.Address(address).toString(true, true, true);
+}
+
+
+export const roundToDecimalPlace = (num: number, decimalPlaces: number) => {
+    const factorOfTen = Math.pow(10, decimalPlaces);
+    return Math.round(num * factorOfTen) / factorOfTen;
 }

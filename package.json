@@ -6,7 +6,7 @@
   "scripts": {
     "start": "ts-node './src/withdrawal_harvester/main.ts' & go run './src/highload_wallet_server/main.go' & ts-node 'ts-node ./server/index.ts'",
     "start:dev": "ts-node ./src/server/index.ts",
-    "start:postgres": "./bash/startPostgresContainer.sh"
+    "start:postgres": "./bash/start_postgres_container.sh"
   },
   "author": "",
   "license": "ISC",

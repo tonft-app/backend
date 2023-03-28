@@ -1,9 +1,40 @@
 import axios from 'axios';
 
+const mainPageTopCollectionQuery = `
+  query mainPageTopCollection($kind: MPTopKind!, $count: Int!, $cursor: String) {
+    mainPageTopCollection(kind: $kind, first: $count, after: $cursor) {
+      cursor
+      items {
+        place
+        tonValue
+        currencyValue(currency: usd)
+        diffPercent
+        floorPrice
+        currencyFloorPrice(currency: usd)
+        collection {
+          address
+          name
+          isVerified
+          image {
+            image {
+              sized(width: 200, height: 200, format: "collection-avatar")
+              __typename
+            }
+            __typename
+          }
+          approximateHoldersCount
+          approximateItemsCount
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+  }
+`;
+
 export async function getFloorDataForCollections() {
     try {
-
-
         const response = await axios.post(
             'https://api.getgems.io/graphql',
             {
@@ -12,7 +43,7 @@ export async function getFloorDataForCollections() {
                     'kind': 'all',
                     'count': 500
                 },
-                'query': 'query mainPageTopCollection($kind: MPTopKind!, $count: Int!, $cursor: String) {\n  mainPageTopCollection(kind: $kind, first: $count, after: $cursor) {\n    cursor\n    items {\n      place\n      tonValue\n      currencyValue(currency: usd)\n      diffPercent\n      floorPrice\n      currencyFloorPrice(currency: usd)\n      collection {\n        address\n        name\n        isVerified\n        image {\n          image {\n            sized(width: 200, height: 200, format: "collection-avatar")\n            __typename\n          }\n          __typename\n        }\n        approximateHoldersCount\n        approximateItemsCount\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}'
+                'query': mainPageTopCollectionQuery
             },
         );
 
@@ -35,8 +66,3 @@ export async function getFloorDataForCollections() {
 
     return {};
 }
-
-(async () => {
-    await getFloorDataForCollections();
-}
-)();

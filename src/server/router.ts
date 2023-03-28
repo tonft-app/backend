@@ -1,25 +1,52 @@
-import * as express from "express";
+import express, { Router } from "express";
 import controller from "./controller";
 
-const router = express.Router();
+const router: Router = express.Router();
 
-// Getters
-router.get("/getUserNfts", controller.getUserNfts);
-router.get("/getCollectionRoyalty", controller.getCollectionRoyalty);
-router.get("/getAllOffers", controller.getAllOffers);
-router.get("/getOffer", controller.getOffer);
-router.get("/getInitLink", controller.getInitLink);
-router.get("/getConfig", controller.getConfig)
-router.get("/getCancelLink", controller.getCancelLink);
-router.get("/getTransferLink", controller.getTransferLink);
+type Route = {
+    path: string;
+    method: 'get' | 'post' | 'put' | 'delete' | 'patch';
+    handler: express.RequestHandler;
+};
 
-// Checkers
-router.get("/checkInit", controller.checkInit);
-router.get("/checkTransfer", controller.checkTransfer);
+const routes: Route[] = [
+    // Getters
+    { path: "/getUserNfts", method: "get", handler: controller.getUserNfts },
+    { path: "/getCollectionRoyalty", method: "get", handler: controller.getCollectionRoyalty },
+    { path: "/getAllOffers", method: "get", handler: controller.getAllOffers },
+    { path: "/getOffer", method: "get", handler: controller.getOffer },
+    { path: "/getInitLink", method: "get", handler: controller.getInitLink },
+    { path: "/getConfig", method: "get", handler: controller.getConfig },
+    { path: "/getCancelLink", method: "get", handler: controller.getCancelLink },
+    { path: "/getTransferLink", method: "get", handler: controller.getTransferLink },
 
-// Miscellaneous
-router.get("/offer/:id/:referral?", controller.getOfferById);
-router.get("/callbackHandler", controller.callbackHandler)
+    // Checkers
+    { path: "/checkInit", method: "get", handler: controller.checkInit },
+    { path: "/checkTransfer", method: "get", handler: controller.checkTransfer },
 
+    // Miscellaneous
+    { path: "/offer/:id/:referral?", method: "get", handler: controller.getOfferById },
+    { path: "/callbackHandler", method: "get", handler: controller.callbackHandler },
+];
+
+routes.forEach(({ path, method, handler }) => {
+    switch (method) {
+        case "get":
+            router.get(path, handler);
+            break;
+        case "post":
+            router.post(path, handler);
+            break;
+        case "put":
+            router.put(path, handler);
+            break;
+        case "delete":
+            router.delete(path, handler);
+            break;
+        case "patch":
+            router.patch(path, handler);
+            break;
+    }
+});
 
 export = router;

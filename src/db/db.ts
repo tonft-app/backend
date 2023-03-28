@@ -10,7 +10,7 @@ const DATABASE_CONFIG = {
     port: Number.parseInt(process.env.DB_PORT!),
 }
 
-interface Order {
+type Order = {
     id: number;
     contract_address: string;
     nft_item_address: string;
@@ -25,20 +25,6 @@ interface Order {
     created_at: Date;
 }
 
-interface User {
-    id: number;
-    address: string;
-    created_at: Date;
-}
-
-interface ReferralBonus {
-    id: number;
-    user_wallet: string;
-    amount: number;
-    contract_address: string;
-    processed: boolean;
-    created_at: Date;
-}
 
 export const getOrderBySaleContractAddress = async (saleContractAddress: string): Promise<Order> => {
     const client = new Client(DATABASE_CONFIG);

@@ -2,219 +2,157 @@ import { createCancelLink, createTransferLink, createSaleLink, createBuyLink } f
 import { getContractState, isNftTransfered, userFriendlyAddress } from "../toncenter/toncenterApi";
 import { calculateStatistics, getContractAddress, toUserFriendlyAddress } from "../utils/utils";
 import { getNftItems, getNftsByUserAddress } from "../tonapi/tonapiApi";
+import { validationConfig, ValidationConfig } from "./validationConfig";
+import { getRoyaltyParamsFromTonscan } from "../tonscan/tonscanApi";
+import { getFloorDataForCollections } from "../getgems/getgemsApi";
 import { NextFunction, Request, Response } from "express";
 import { sendMessageToChannel } from "../telegram/bot";
-import { getRoyaltyParams } from "../tonnft/tonnft";
 import { Address } from "ton";
 import {
   changeStatusOfOrderBySaleContractAddress,
+  getOrderBySaleContractAddress,
   insertIntoReferralBonusTable,
   getAllActiveAndSoldOffers,
   insertIntoOrders,
   getOrderByHash,
   getOrders,
-  getOrderBySaleContractAddress,
 } from "../db/db";
-import { getFloorDataForCollections } from "../getgems/getgemsApi";
-
-import TonWeb from "tonweb";
-import { getRoyaltyParamsFromTonscan } from "../tonscan/tonscanApi";
 
 
+const getConfig = async (req: Request, res: Response, next: NextFunction) => {
+  return res.status(200).json(
+    {
+      "url": "tonft.app",
+      "name": "TONFT",
+      "iconUrl": "https://telegra.ph/file/c7201eca05a8254d17d0b.png",
+    }
+  );
+}
 
-const getAllOffers = async (req: Request, res: Response, next: NextFunction) => {
-  let activeAndSoldOffers = await getAllActiveAndSoldOffers();
+const validateRequestFields = (req: Request, res: Response, validationConfig: ValidationConfig[]): boolean => {
+  for (const config of validationConfig) {
+    const fieldValue = req.query[config.fieldName];
 
-  if (activeAndSoldOffers.length === 0) {
-    return res.status(200).json({
-      message: "No active orders",
-    });
+    if (!config.validationFn(fieldValue)) {
+      res.status(400).json({ message: config.errorMessage });
+      return false;
+    }
   }
-  let itemsData = await getNftItems(activeAndSoldOffers.map((order) => order.nft_item_address).join(","));
+
+  return true;
+};
 
 
+
+const getUnifiedData = async (activeAndSoldOffers: any[]) => {
+  const itemsData = await getNftItems(activeAndSoldOffers.map((order) => order.nft_item_address).join(","));
   const floorData = await getFloorDataForCollections();
 
-  const unifiedData = activeAndSoldOffers.map((order, _) => {
+  return activeAndSoldOffers.map((order) => {
     const item = itemsData.find((item: any) => {
       const address = Address.parseRaw(item.address).toFriendly();
-      return address === order.nft_item_address
-    }
-    );
+      return address === order.nft_item_address;
+    });
 
     const floorPrice = floorData[toUserFriendlyAddress(item.collection_address)] === undefined ? 0 : floorData[toUserFriendlyAddress(item.collection_address)].floorPrice;
 
     return {
       ...order,
       ...item,
-      floor_price: floorPrice
+      floor_price: floorPrice,
     };
-  });
-
-  const statistics = await calculateStatistics();
-
-  const soldOrders = unifiedData.filter((order) => order.status === "sold");
-  const activeOrders = unifiedData.filter((order) => order.status === "active");
-
-
-  return res.status(200).json({
-    activeOrders: activeOrders,
-    soldOrders: soldOrders,
-    statistics
   });
 };
 
-const getOffer = async (req: Request, res: Response, next: NextFunction) => {
-  let nftItemAddress = req.query.nftItemAddress;
-  let ownerAddress = req.query.ownerAddress;
-  let saleContractAddress = req.query.saleContractAddress;
+const getAllOffers = async (req: Request, res: Response, next: NextFunction) => {
+  const activeAndSoldOffers = await getAllActiveAndSoldOffers();
 
-
-  if (!nftItemAddress) {
-    return res.status(400).json({
-      message: "nftItemAddress is required",
+  if (activeAndSoldOffers.length === 0) {
+    return res.status(200).json({
+      message: "No active orders",
     });
   }
 
-  if (!ownerAddress) {
-    return res.status(400).json({
-      message: "ownerAddress is required",
-    });
+  const unifiedData = await getUnifiedData(activeAndSoldOffers);
+  const statistics = await calculateStatistics();
+
+  return res.status(200).json({
+    activeOrders: unifiedData.filter((order) => order.status === "active"),
+    soldOrders: unifiedData.filter((order) => order.status === "sold"),
+    statistics,
+  });
+};
+
+
+const getOffer = async (req: Request, res: Response, _: NextFunction) => {
+  if (!validateRequestFields(req, res, validationConfig.getOffer)) {
+    return;
   }
 
-  if (!saleContractAddress) {
-    return res.status(400).json({
-      message: "saleContractAddress is required",
-    });
-  }
-
-  saleContractAddress = saleContractAddress.toString();
-  nftItemAddress = nftItemAddress.toString();
-  ownerAddress = ownerAddress.toString();
-
-  const orders = await getOrders(nftItemAddress, ownerAddress, saleContractAddress);
+  const { nftItemAddress, ownerAddress, saleContractAddress } = req.query;
+  const orders = await getOrders(
+    nftItemAddress!.toString(),
+    ownerAddress!.toString(),
+    saleContractAddress!.toString()
+  );
 
   if (orders.length === 0) {
-    return res.status(404).json({
-      error: "No active orders",
-    });
+    return res.status(404).json({ error: "No active orders" });
   }
 
   const order = orders[0];
   const cancelLink = createCancelLink(order.owner_address, order.contract_address);
-
   const buyLink = createBuyLink(order.contract_address, order.price, "0");
 
-  return res.status(200).json({
-    order,
-    cancelLink,
-    buyLink
-  });
-}
+  return res.status(200).json({ order, cancelLink, buyLink });
+};
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 const getInitLink = async (req: Request, res: Response, next: NextFunction) => {
-  let nftItemAddress = req.query.nftItemAddress;
-  let fullPrice = req.query.fullPrice;
-  let royaltyPercent = req.query.royaltyPercent;
-  let royaltyAddress = req.query.royaltyAddress;
-  let refPercent = req.query.refPercent;
-
-  if (!nftItemAddress) {
-    return res.status(400).json({
-      message: "contractAddress is required",
-    });
+  if (!validateRequestFields(req, res, validationConfig.getInitLink)) {
+    return;
   }
 
-  if (!fullPrice) {
-    return res.status(400).json({
-      message: "fullPrice is required",
-    });
-  }
-
-  if (isNaN(Number.parseFloat(fullPrice.toString()))) {
-    return res.status(400).json({
-      message: "fullPrice should be a number",
-    });
-  }
-
-  if (!royaltyPercent) {
-    return res.status(400).json({
-      message: "royaltyPercent is required",
-    });
-  }
-
-  if (isNaN(Number.parseFloat(royaltyPercent.toString()))) {
-    return res.status(400).json({
-
-      message: "royaltyPercent should be a number",
-
-    });
-  }
-
-  if (!royaltyAddress) {
-    return res.status(400).json({
-      message: "royaltyAddress is required",
-    });
-  }
-
-  if (!refPercent) {
-    return res.status(400).json({
-      message: "ref_percent is required",
-    });
-  }
+  const { nftItemAddress, fullPrice, royaltyPercent, royaltyAddress, refPercent } = req.query;
 
   try {
-    if (Number.parseFloat(fullPrice.toString()) < 1) {
+    const ref = parseFloat(refPercent as string);
+    const royalty = parseFloat(royaltyPercent as string);
+
+    if (ref + royalty > 100 || ref < 2.5) {
       return res.status(400).json({
-        message: "fullPrice should be more than 1",
+        message: "refPercent + royaltyPercent should be less than 100 and refPercent should be more than 2.5",
       });
     }
   } catch (e) {
-    return res.status(400).json({
-      message: "fullPrice should be a number",
-    });
+    console.log("error", e);
   }
 
-  nftItemAddress = nftItemAddress.toString();
-  fullPrice = fullPrice.toString();
-  royaltyPercent = royaltyPercent.toString();
-  royaltyAddress = royaltyAddress.toString();
-  refPercent = refPercent.toString();
+  const link = createSaleLink(
+    nftItemAddress!.toString(),
+    fullPrice!.toString(),
+    royaltyPercent!.toString(),
+    royaltyAddress!.toString(),
+    refPercent!.toString()
+  );
 
-  const link = createSaleLink(nftItemAddress, fullPrice, royaltyPercent, royaltyAddress, refPercent);
-
-  return res.status(200).json({
-    link,
-  });
-}
-
+  return res.status(200).json({ link });
+};
 
 const checkInit = async (req: Request, res: Response, next: NextFunction) => {
+  if (!validateRequestFields(req, res, validationConfig.checkInit)) {
+    return;
+  }
+
   try {
-    let ownerAddress = req.query.ownerAddress;
-    let createdAt = req.query.createdAt;
-
-    if (!ownerAddress) {
-      return res.status(400).json({
-        message: "ownerAddress is required",
-      });
-    }
-
-    if (!createdAt) {
-      return res.status(400).json({
-        message: "createdAt is required",
-      });
-    }
-
-    if (isNaN(Number.parseInt(createdAt.toString()))) {
-      return res.status(400).json({
-        message: "createdAt should be a number",
-      });
-    }
-
-    ownerAddress = ownerAddress.toString();
-    createdAt = createdAt.toString();
-    const contractAddress = await getContractAddress(ownerAddress, createdAt);
+    const { ownerAddress, createdAt } = req.query;
+    const contractAddress = await getContractAddress(ownerAddress!.toString(), createdAt!.toString());
 
     if (!contractAddress) {
       return res.status(200).json({
@@ -235,30 +173,16 @@ const checkInit = async (req: Request, res: Response, next: NextFunction) => {
 }
 
 const getTransferLink = async (req: Request, res: Response, next: NextFunction) => {
+  if (!validateRequestFields(req, res, validationConfig.getTransferLink)) {
+    return;
+  }
+
   try {
-    let contractAddress = req.query.contractAddress;
-    let nftItemAddress = req.query.nftItemAddress;
-
-    if (!contractAddress) {
-      return res.status(400).json({
-        message: "contractAddress is required",
-      });
-    }
-
-    if (!nftItemAddress) {
-      return res.status(400).json({
-        message: "nftItemAddress is required",
-      });
-    }
-
-    contractAddress = contractAddress.toString();
-    nftItemAddress = nftItemAddress.toString();
-
-    const link = createTransferLink(contractAddress, nftItemAddress);
+    const { contractAddress, nftItemAddress } = req.query;
+    const link = createTransferLink(contractAddress!.toString(), nftItemAddress!.toString());
     return res.status(200).json({
       link,
     });
-
 
   } catch (error) {
     return res.status(500).json({
@@ -268,108 +192,39 @@ const getTransferLink = async (req: Request, res: Response, next: NextFunction) 
 }
 
 const checkTransfer = async (req: Request, res: Response, next: NextFunction) => {
+  if (!validateRequestFields(req, res, validationConfig.checkTransfer)) {
+    return;
+  }
+
   try {
-    let contractAddress = req.query.contractAddress;
-    let nftItemAddress = req.query.nftItemAddress;
-    let ownerAddress = req.query.ownerAddress;
-    let price = req.query.price;
-    let royaltyPercent = req.query.royaltyPercent;
-    let royaltyAddress = req.query.royaltyAddress;
-    let refPercent = req.query.refPercent;
-    let hash = req.query.hash;
+    const { contractAddress, nftItemAddress, ownerAddress, price, royaltyPercent, royaltyAddress, refPercent, hash } = req.query;
 
-    if (!contractAddress) {
-      return res.status(400).json({
-        message: "contractAddress is required",
-      });
-    }
-
-    if (!nftItemAddress) {
-      return res.status(400).json({
-        message: "nftItemAddress is required",
-      });
-    }
-
-    if (!ownerAddress) {
-      return res.status(400).json({
-        message: "ownerAddress is required",
-      });
-    }
-
-    if (!price) {
-      return res.status(400).json({
-        message: "price is required",
-      });
-    }
-
-    if (!royaltyPercent) {
-      return res.status(400).json({
-        message: "royaltyPercent is required",
-      });
-    }
-
-    if (!royaltyAddress) {
-      return res.status(400).json({
-        message: "royaltyAddress is required",
-      });
-    }
-
-    if (!refPercent) {
-      return res.status(400).json({
-        message: "refPercent is required",
-      });
-    }
-
-    if (!hash) {
-      return res.status(400).json({
-        message: "hash is required",
-      });
-    }
-
-    contractAddress = contractAddress.toString();
-    nftItemAddress = nftItemAddress.toString();
-    ownerAddress = ownerAddress.toString();
-    price = price.toString();
-    royaltyPercent = royaltyPercent.toString();
-    royaltyAddress = royaltyAddress.toString();
-    refPercent = refPercent.toString();
-    hash = hash.toString();
-
-    const transfered = await isNftTransfered(contractAddress, nftItemAddress);
+    const transfered = await isNftTransfered(contractAddress!.toString(), nftItemAddress!.toString());
 
     if (transfered) {
-      console.log("transfered")
+      console.log("transfered");
 
+      const ref = parseFloat(refPercent!.toString());
+      const royalty = parseFloat(royaltyPercent!.toString());
 
-      try {
-        const ref = parseFloat(refPercent);
-        const royalty = parseFloat(royaltyPercent);
-
-        if (ref + royalty > 100) {
-          return res.status(400).json({
-            message: "refPercent + royaltyPercent should be less than 100",
-          });
-        }
-      }
-      catch (e) {
-        console.log("error", e)
+      if (ref + royalty > 100) {
+        return res.status(400).json({
+          message: "refPercent + royaltyPercent should be less than 100",
+        });
       }
 
+      const result = await insertIntoOrders(contractAddress!.toString(), nftItemAddress!.toString(), ownerAddress!.toString(), price!.toString(), 'active', royaltyPercent!.toString(), royaltyAddress!.toString(), refPercent!.toString(), '', hash!.toString());
 
-      const result = await insertIntoOrders(contractAddress, nftItemAddress, ownerAddress, price, 'active', royaltyPercent, royaltyAddress, refPercent, '', hash);
-
-
-      console.log("result", result)
+      console.log("result", result);
       if (result.error === null) {
-        console.log("send message")
-        await sendMessageToChannel(contractAddress, nftItemAddress, price, ownerAddress, "new", hash);
+        console.log("send message");
+        await sendMessageToChannel(contractAddress!.toString(), nftItemAddress!.toString(), price!.toString(), ownerAddress!.toString(), "new", hash!.toString());
       }
     }
-
 
     return res.status(200).json({
       transfered,
-      hash,
+      hash: hash!.toString(),
     });
 
   } catch (error) {
@@ -380,16 +235,12 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
 }
 
 const getUserNfts = async (req: Request, res: Response, next: NextFunction) => {
-  let userAddress = req.query.userAddress;
-  if (!userAddress) {
-    return res.status(400).json({
-      message: "userAddress is required",
-    });
+  if (!validateRequestFields(req, res, validationConfig.getUserNfts)) {
+    return;
   }
 
-  userAddress = userAddress.toString();
-
-  const nfts = await getNftsByUserAddress(userAddress);
+  const { userAddress } = req.query;
+  const nfts = await getNftsByUserAddress(userAddress!.toString());
 
   nfts.forEach(async (nft: any) => {
     const contractAddress = nft?.sale?.address;
@@ -409,66 +260,31 @@ const getUserNfts = async (req: Request, res: Response, next: NextFunction) => {
 
 
 const getCancelLink = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    let ownerAddress = req.query.ownerAddress;
-    let saleContractAddress = req.query.saleContractAddress;
-
-    if (!ownerAddress) {
-      return res.status(400).json({
-        message: "ownerAddress is required",
-      });
-    }
-
-    if (!saleContractAddress) {
-      return res.status(400).json({
-        message: "saleContractAddress is required",
-      });
-    }
-
-    ownerAddress = ownerAddress.toString();
-    saleContractAddress = saleContractAddress.toString();
-
-
-    const cancelLink = createCancelLink(ownerAddress, saleContractAddress)
-
-    return res.status(200).json({
-      cancelLink,
-    });
-
-  } catch (error) {
-    return res.status(500).json({
-      message: "Something went wrong",
-    });
+  if (!validateRequestFields(req, res, validationConfig.getCancelLink)) {
+    return;
   }
-}
 
-const getConfig = async (req: Request, res: Response, next: NextFunction) => {
-  return res.status(200).json(
-    {
-      "url": "tonft.app",
-      "name": "TONFT",
-      "iconUrl": "https://telegra.ph/file/c7201eca05a8254d17d0b.png",
-    }
-  );
-}
+  const ownerAddress = req.query.ownerAddress!.toString();
+  const saleContractAddress = req.query.saleContractAddress!.toString();
+
+  const cancelLink = createCancelLink(ownerAddress, saleContractAddress);
+
+  return res.status(200).json({
+    cancelLink,
+  });
+};
+
 
 
 const checkForInactiveState = async (saleContractAddress: string) => {
-  let i = 0;
-  while (true) {
+  for (let i = 0; i < 6; i++) {
     console.log('checkForInactiveState', i)
-    if (i > 6) {
-      break;
-    }
-
     const contractState = await getContractState(saleContractAddress);
     if (contractState.state === 'not active') {
       return true;
     }
 
     await new Promise((resolve) => setTimeout(resolve, 5 * 1000));
-
-    i++;
   }
 
   return false;
@@ -476,56 +292,52 @@ const checkForInactiveState = async (saleContractAddress: string) => {
 
 
 const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunction) => {
-  console.log(req.query);
+  try {
+    if (!validateRequestFields(req, res, validationConfig.nftBuyCallbackHandler)) {
+      return;
+    }
 
-  const saleContractAddress = req.query.saleContractAddress;
-  const fullPrice = req.query.fullPrice;
-  const referral = req.query.referral;
+    const saleContractAddress = req.query.saleContractAddress!.toString();
+    const fullPrice = req.query.fullPrice;
+    const referral = req.query.referral;
 
-  if (!saleContractAddress) {
-    return res.status(400).json({
-      message: "saleContractAddress is required",
+    const saleContractAddressFormatted = await userFriendlyAddress(saleContractAddress);
+    const actualBuy: boolean = await checkForInactiveState(saleContractAddressFormatted);
+
+    console.log("actualBuy", actualBuy);
+
+    if (!actualBuy) {
+      return res.status(500).json({
+        message: "fake buy",
+      });
+    }
+
+    await changeStatusOfOrderBySaleContractAddress(saleContractAddressFormatted, "sold");
+
+    const order = await getOrderBySaleContractAddress(saleContractAddressFormatted);
+    if (order) {
+      await sendMessageToChannel(
+        order.contract_address,
+        order.nft_item_address,
+        order.price.toString(),
+        order.owner_address,
+        "sold"
+      );
+    }
+
+    if (referral) {
+      await insertIntoReferralBonusTable(referral.toString(), fullPrice!.toString(), saleContractAddress.toString(), false);
+    }
+
+    return res.status(200).json({
+      message: "success",
     });
-  }
-
-  if (!fullPrice) {
-    return res.status(400).json({
-      message: "fullPrice is required",
-    });
-  }
-
-  const saleContractAddressFormated = await userFriendlyAddress(saleContractAddress.toString());
-  const actualBuy: boolean = await checkForInactiveState(saleContractAddressFormated);
-
-  console.log('actualBuy', actualBuy)
-
-  if (!actualBuy) {
+  } catch (error) {
     return res.status(500).json({
-      message: "fake buy",
+      message: "Something went wrong",
     });
   }
-
-  await changeStatusOfOrderBySaleContractAddress(saleContractAddressFormated, 'sold');
-
-  const order = await getOrderBySaleContractAddress(saleContractAddressFormated);
-  if (order) {
-    await sendMessageToChannel(
-      order.contract_address,
-      order.nft_item_address,
-      order.price.toString(),
-      order.owner_address,
-      'sold'
-    )
-  }
-
-  if (referral) {
-    await insertIntoReferralBonusTable(referral.toString(), fullPrice.toString(), saleContractAddress.toString(), false);
-  }
-
-  return res.status(200).json({
-    message: "success",
-  });
-}
+};
 
 const nftCancelCallbackHandler = async (req: Request, res: Response, next: NextFunction) => {
   const saleContractAddress = req.query.saleContractAddress;
@@ -557,11 +369,9 @@ const callbackHandler = async (req: Request, res: Response, next: NextFunction) 
 
     switch (type) {
       case 'nft-buy':
-        console.log('nft-buy-loool')
         return nftBuyCallbackHandler(req, res, next);
 
       case 'nft-cancel':
-        console.log('nft-cancel-loool')
         return nftCancelCallbackHandler(req, res, next);
     }
   }
@@ -579,6 +389,20 @@ const getCollectionRoyalty = async (req: Request, res: Response, next: NextFunct
         message: "collectionAddress is required",
       });
     }
+
+
+    // Anonymous numbers, usernames and dns does not have accesible royalty data in common way
+    if (collectionAddress.toString() === "EQAOQdwdw8kGftJCSFgOErM1mBjYPe4DBPq8-AhF6vr9si5N" ||
+      collectionAddress.toString() === "EQCA14o1-VWhS2efqoh_9M1b_A9DtKTuoqfmkn83AbJzwnPi" ||
+      collectionAddress.toString() === "EQC3dNlesgVD8YbAazcauIrXBPfiVhMMr5YYk2in0Mtsz0Bz"
+    ) {
+
+      return res.status(200).json({
+        percent: 0,
+        destination: "EQDo8eYrFypI4cCZures4CiGsPXZyyHKR9-f6Vxly60h5lrh",
+      });
+    }
+
 
     const { royalty, destination } = await getRoyaltyParamsFromTonscan(collectionAddress.toString());
 

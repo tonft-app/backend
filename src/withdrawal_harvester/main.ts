@@ -7,8 +7,7 @@ import { selectNotProcessedReferralBonus, setProcessedToTrueByIds } from "../db/
 import { userFriendlyAddress } from "../toncenter/toncenterApi";
 import { roundToPrecision } from "../utils/utils";
 
-
-async function withdrawBonuses(txs: any, comment: string) {
+const withdrawBonuses = async (txs: any, comment: string) => {
     const params = {
         send_mode: "1",
         comment: comment
@@ -86,4 +85,3 @@ async function withdrawBonuses(txs: any, comment: string) {
     }
 }
 )();
-

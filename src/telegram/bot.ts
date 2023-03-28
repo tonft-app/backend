@@ -1,10 +1,7 @@
 import { Telegraf } from 'telegraf';
 import axios from 'axios';
-
-
-
 import fs from 'fs';
-import { pipeline } from "stream/promises";
+import { pipeline } from 'stream/promises';
 
 const IMAGE_PATH = process.env.BOT_IMAGE_PATH;
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -12,40 +9,33 @@ const CHANNEL_ID = process.env.CHANNEL_ID;
 
 const bot = new Telegraf(BOT_TOKEN!);
 
+const fetchNftInfo = async (nftAddress: string) => {
+  const request = await axios.get(`https://tonapi.io/v1/nft/getItems?addresses=${nftAddress}`);
+  const { collection, metadata } = request.data.nft_items[0];
 
-async function getNftInfo(nftAddress: string) {
-  const request = await axios.get(`https://tonapi.io/v1/nft/getItems?addresses=${nftAddress}`)
-  const collectionName = request.data.nft_items[0].collection.name;
-  const itemName = request.data.nft_items[0].metadata.name;
-  const itemDescription = request.data.nft_items[0].metadata.description;
-  const imageUrl = request.data.nft_items[0].metadata.image;
+  return {
+    collectionName: collection.name,
+    itemName: metadata.name,
+    itemDescription: metadata.description,
+    imageUrl: metadata.image,
+  };
+};
 
-  return { collectionName, itemName, itemDescription, imageUrl };
-}
-
-async function getImage(nftUrl: string) {
-  // If protocol is ipfs
-  if (nftUrl.startsWith("ipfs://")) {
-    nftUrl = "https://ipfs.io/ipfs/" + nftUrl.split("ipfs://")[1];
+const downloadImage = async (nftUrl: string) => {
+  if (nftUrl.startsWith('ipfs://')) {
+    nftUrl = `https://ipfs.io/ipfs/${nftUrl.split('ipfs://')[1]}`;
   }
 
-  const response = await axios({
-    url: nftUrl,
-    method: "GET",
-    responseType: "stream",
-  });
+  const response = await axios.get(nftUrl, { responseType: 'stream' });
+  const contentType = response.headers['content-type'];
+  const ext = contentType?.split('/')[1];
 
-  if (!response.headers["content-type"]) {
+  if (!ext || !['png', 'jpg', 'jpeg'].includes(ext)) {
     return;
   }
 
-  const ext = response.headers["content-type"].split("/")[1];
-
-  if (ext !== "png" && ext !== "jpg" && ext !== "jpeg") {
-    return;
-  }
-
-  const writer = fs.createWriteStream(IMAGE_PATH! + "test." + ext);
+  const filePath = `${IMAGE_PATH!}test.${ext}`;
+  const writer = fs.createWriteStream(filePath);
 
   try {
     await pipeline(response.data, writer);
@@ -55,50 +45,87 @@ async function getImage(nftUrl: string) {
     return;
   }
 
-  return "test." + ext;
-}
+  return `test.${ext}`;
+};
 
-export function createMessageText(
+const createMessageText = (params: {
+  contractAddress: string;
+  nftAddress: string;
+  salePrice: string;
+  ownerAddress: string;
+  collectionName: string;
+  itemName: string;
+  itemDescription: string;
+  imageUrl: string;
+  type: string;
+  hash: string;
+}) => {
+  const {
+    contractAddress,
+    nftAddress,
+    salePrice,
+    ownerAddress,
+    collectionName,
+    itemName,
+    itemDescription,
+    imageUrl,
+    type,
+    hash,
+  } = params;
+  const link = `https://tonft.app/offer/${hash}`;
+  const formattedPrice = Number.parseFloat(salePrice).toFixed(2);
+
+  if (type === 'new') {
+    return `<b>🔖 <a href="${link}">New offer</a></b>
+<b>Item:</b> ${itemName}
+<b>Collection:</b> ${collectionName}
+<a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a>
+<a href="${link}"><b>Buy now for ${formattedPrice} TON</b></a>`;
+  } else {
+    return `<b>👑 <a href="${link}">ITEM SOLD</a></b>
+<b>Item:</b> ${itemName}
+<a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a>
+Sale price: <a>${formattedPrice}</a> 💎`;
+  }
+};
+
+export const sendMessageToChannel = async (
   contractAddress: string,
   nftAddress: string,
   salePrice: string,
   ownerAddress: string,
-  itemInfo: any,
-  type: string,
-  hash: string
-) {
-  const { collectionName, itemName, itemDescription, imageUrl } = itemInfo;
-  const link = 'https://tonft.app/offer/' + hash;
+  type = 'new',
+  hash = '',
+) => {
+  const {
+    collectionName,
+    itemName,
+    itemDescription,
+    imageUrl,
+  } = await fetchNftInfo(nftAddress);
+  const imageFile = await downloadImage(imageUrl);
 
-  if (type === "new") {
-    return `<b>🔖 <a href="${link}">New offer</a></b>
+  const messageParams = {
+    contractAddress,
+    nftAddress,
+    salePrice,
+    ownerAddress,
+    collectionName,
+    itemName,
+    itemDescription,
+    imageUrl,
+    type,
+    hash,
+  };
 
-<b>Item:</b> ${itemName}
-<b>Collection:</b> ${collectionName}
-
-<a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a> 
-
-<a href="${link}"><b>Buy now for ${Number.parseFloat(salePrice).toFixed(2)} TON</b></a>`;
-  } else {
-    return `<b>👑 <a href="${imageUrl}">ITEM SOLD</a></b>
-
-<b>Item:</b> ${itemName}
-
-<a href="https://tonscan.org/address/${nftAddress}">NFT</a> | <a href="https://tonscan.org/address/${contractAddress}">Sale contract</a> 
-Sale price: <a>${Number.parseFloat(salePrice).toFixed(2)}</a> 💎`;
-  }
-}
-
-export async function sendMessageToChannel(contractAddress: string, nftAddress: string, salePrice: string, ownerAddress: string, type = "new", hash = "") {
-  const itemInfo = await getNftInfo(nftAddress);
-  const image = await getImage(itemInfo.imageUrl);
-
-  if (!image) {
-    const text = createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash);
+  if (!imageFile) {
+    const text = createMessageText(messageParams);
     await bot.telegram.sendMessage(CHANNEL_ID!, text, { parse_mode: 'HTML' });
   } else {
-    const imageBinary = fs.readFileSync(IMAGE_PATH! + image);
-    await bot.telegram.sendPhoto(CHANNEL_ID!, { source: imageBinary }, { caption: createMessageText(contractAddress, nftAddress, salePrice, ownerAddress, itemInfo, type, hash), parse_mode: 'HTML' });
+    const imageBinary = fs.readFileSync(`${IMAGE_PATH!}${imageFile}`);
+    await bot.telegram.sendPhoto(CHANNEL_ID!, { source: imageBinary }, {
+      caption: createMessageText(messageParams),
+      parse_mode: 'HTML',
+    });
   }
-}
-
+};

@@ -11,8 +11,3 @@ export const getRoyaltyParamsFromTonscan = async (address: string) => {
         destination: response.data.nft_collection.royalty.address
     };
 }
-
-
-(async () => {
-
-})();

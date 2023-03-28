@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-
 export const getNftsByUserAddress = async (address: string) => {
     const response = await axios.get('https://tonapi.io/v1/nft/searchItems', {
         params: {

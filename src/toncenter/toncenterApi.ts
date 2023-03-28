@@ -1,8 +1,5 @@
 import axios from 'axios';
 
-import TonWeb from 'tonweb';
-import Cell from 'tonweb';
-
 export const getRecentTransactions = async (address: string) => {
 
     try {
@@ -25,40 +22,6 @@ export const getRecentTransactions = async (address: string) => {
 
     return [];
 }
-
-// export const getRoyaltyPercent = async (address_: string) => {
-//     try {
-//         const response = await axios.post(
-//             'https://toncenter.com/api/v2/runGetMethod',
-//             {
-//                 'address': address_,
-//                 'method': 'royalty_params',
-//                 'stack': []
-//             },
-//             {
-//                 headers: {
-//                     'accept': 'application/json',
-//                     'Content-Type': 'application/json'
-//                 }
-//             }
-//         );
-
-//         // from b64 to address
-//         const cell = new Cell.fromBoc(response.data.result.stack[0][2]);
-    
-//         return {
-//             royalty: parseInt(response.data.result.stack[0][1]),
-//             destination: response.data.result.stack[0][2]
-//         };
-//     }
-
-//     catch (error) {
-//         console.log(error)
-//     }
-
-//     return 0;
-// }
-
 
 export const userFriendlyAddress = async (address: string) => {
     let attempts = 0;
@@ -89,7 +52,7 @@ export const userFriendlyAddress = async (address: string) => {
 }
 
 
-export async function isNftTransfered(contractAddress: string, nftItemAddress: string) {
+export const isNftTransfered = async (contractAddress: string, nftItemAddress: string) => {
     const transactions = await getRecentTransactions(contractAddress);
 
     const transfered = transactions.filter((transaction: any) => {
@@ -100,12 +63,11 @@ export async function isNftTransfered(contractAddress: string, nftItemAddress: s
 }
 
 
-export async function getContractState(contractAddress: string) {
+export const getContractState = async (contractAddress: string) => {
     try {
 
         const response = await axios.post(
             'https://toncenter.com/api/v2/runGetMethod',
-            // '{\n  "address": "EQAzBnchkH-3luhyuNu2VcgcwfJ6ekzwgjDaQh36VvbiAWrE",\n  "method": "get_sale_data",\n  "stack": [\n  ]\n}',
             {
                 'address': contractAddress,
                 'method': 'get_sale_data',
@@ -135,10 +97,3 @@ export async function getContractState(contractAddress: string) {
         state: "error"
     }
 }
-
-
-
-
-(async () => {
-}
-)();
