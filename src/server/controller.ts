@@ -52,7 +52,10 @@ const getUnifiedData = async (activeAndSoldOffers: any[]) => {
       return address === order.nft_item_address;
     });
 
-    const floorPrice = floorData[toUserFriendlyAddress(item.collection_address)] === undefined ? 0 : floorData[toUserFriendlyAddress(item.collection_address)].floorPrice;
+    const floorPrice = floorData[
+      toUserFriendlyAddress(item.collection_address)] === undefined ?
+      0 : floorData[toUserFriendlyAddress(item.collection_address)
+      ].floorPrice;
 
     return {
       ...order,
@@ -188,7 +191,16 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
   }
 
   try {
-    const { contractAddress, nftItemAddress, ownerAddress, price, royaltyPercent, royaltyAddress, refPercent, hash } = req.query;
+    const {
+      contractAddress,
+      nftItemAddress,
+      ownerAddress,
+      price,
+      royaltyPercent,
+      royaltyAddress,
+      refPercent,
+      hash
+    } = req.query;
 
     const transfered = await isNftTransfered(contractAddress!.toString(), nftItemAddress!.toString());
 
