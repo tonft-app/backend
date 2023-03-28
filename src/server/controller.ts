@@ -42,8 +42,6 @@ const validateRequestFields = (req: Request, res: Response, validationConfig: Va
   return true;
 };
 
-
-
 const getUnifiedData = async (activeAndSoldOffers: any[]) => {
   const itemsData = await getNftItems(activeAndSoldOffers.map((order) => order.nft_item_address).join(","));
   const floorData = await getFloorDataForCollections();
@@ -106,13 +104,6 @@ const getOffer = async (req: Request, res: Response, _: NextFunction) => {
 
   return res.status(200).json({ order, cancelLink, buyLink });
 };
-
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 const getInitLink = async (req: Request, res: Response, next: NextFunction) => {
   if (!validateRequestFields(req, res, validationConfig.getInitLink)) {
@@ -213,12 +204,30 @@ const checkTransfer = async (req: Request, res: Response, next: NextFunction) =>
         });
       }
 
-      const result = await insertIntoOrders(contractAddress!.toString(), nftItemAddress!.toString(), ownerAddress!.toString(), price!.toString(), 'active', royaltyPercent!.toString(), royaltyAddress!.toString(), refPercent!.toString(), '', hash!.toString());
+      const result = await insertIntoOrders(
+        contractAddress!.toString(),
+        nftItemAddress!.toString(),
+        ownerAddress!.toString(),
+        price!.toString(),
+        'active',
+        royaltyPercent!.toString(),
+        royaltyAddress!.toString(),
+        refPercent!.toString(),
+        '',
+        hash!.toString()
+      );
 
       console.log("result", result);
       if (result.error === null) {
         console.log("send message");
-        await sendMessageToChannel(contractAddress!.toString(), nftItemAddress!.toString(), price!.toString(), ownerAddress!.toString(), "new", hash!.toString());
+        await sendMessageToChannel(
+          contractAddress!.toString(),
+          nftItemAddress!.toString(),
+          price!.toString(),
+          ownerAddress!.toString(),
+          "new",
+          hash!.toString()
+        );
       }
     }
 
@@ -326,7 +335,12 @@ const nftBuyCallbackHandler = async (req: Request, res: Response, next: NextFunc
     }
 
     if (referral) {
-      await insertIntoReferralBonusTable(referral.toString(), fullPrice!.toString(), saleContractAddress.toString(), false);
+      await insertIntoReferralBonusTable(
+        referral.toString(),
+        fullPrice!.toString(),
+        saleContractAddress.toString(),
+        false
+      );
     }
 
     return res.status(200).json({
